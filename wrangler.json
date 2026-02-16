@@ -12,5 +12,8 @@
 	],
 	"observability": {
 		"enabled": true
+	},
+	"vars": {
+		"ALLOWED_ORIGIN": "https://veejay.ir"
 	}
 }
