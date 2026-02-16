@@ -1,59 +1,126 @@
-# Worker + D1 Database
+# Portfolio Contact Form Worker (Cloudflare Workers + D1)
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/cloudflare/templates/tree/main/d1-template)
+This project stores messages from your portfolio contact form in Cloudflare D1.
 
-![Worker + D1 Template Preview](https://imagedelivery.net/wSMYJvS3Xw-n339CbDyDIA/cb7cb0a9-6102-4822-633c-b76b7bb25900/public)
+## What this Worker provides
 
-<!-- dash-content-start -->
+- `POST /api/messages` for public form submissions.
+- `GET /api/messages` for fetching stored messages (protected by admin token).
+- `GET /admin` for a simple browser UI to view messages (protected by admin token).
+- D1 schema for a professional message table with timestamps and useful indexes.
 
-D1 is Cloudflare's native serverless SQL database ([docs](https://developers.cloudflare.com/d1/)). This project demonstrates using a Worker with a D1 binding to execute a SQL statement. A simple frontend displays the result of this query:
+## Message schema (D1)
 
-```SQL
-SELECT * FROM comments LIMIT 3;
+Table: `contact_messages`
+
+- `id` integer primary key
+- `name` text (required)
+- `email` text (required)
+- `subject` text (optional)
+- `message` text (required)
+- `ip` text (optional, from `CF-Connecting-IP`)
+- `user_agent` text (optional)
+- `created_at` text default `CURRENT_TIMESTAMP`
+
+## Setup
+
+1. Install dependencies:
+```bash
+npm install
 ```
 
-The D1 database is initialized with a `comments` table and this data:
-
-```SQL
-INSERT INTO comments (author, content)
-VALUES
-    ('Kristian', 'Congrats!'),
-    ('Serena', 'Great job!'),
-    ('Max', 'Keep up the good work!')
-;
+2. Create a D1 database (if needed):
+```bash
+npx wrangler d1 create submitform-db
 ```
 
-> [!IMPORTANT]
-> When using C3 to create this project, select "no" when it asks if you want to deploy. You need to follow this project's [setup steps](https://github.com/cloudflare/templates/tree/main/d1-template#setup-steps) before deploying.
+3. Put the returned `database_id` into `wrangler.json` under `d1_databases[0].database_id`.
 
-<!-- dash-content-end -->
-
-## Getting Started
-
-Outside of this repo, you can start a new project with this template using [C3](https://developers.cloudflare.com/pages/get-started/c3/) (the `create-cloudflare` CLI):
-
-```
-npm create cloudflare@latest -- --template=cloudflare/templates/d1-template
+4. Apply migrations to remote D1:
+```bash
+npx wrangler d1 migrations apply DB --remote
 ```
 
-A live public deployment of this template is available at [https://d1-template.templates.workers.dev](https://d1-template.templates.workers.dev)
+5. Set secrets/vars:
+```bash
+npx wrangler secret put ADMIN_TOKEN
+```
 
-## Setup Steps
+Optional CORS restriction (recommended):
 
-1. Install the project dependencies with a package manager of your choice:
-   ```bash
-   npm install
-   ```
-2. Create a [D1 database](https://developers.cloudflare.com/d1/get-started/) with the name "d1-template-database":
-   ```bash
-   npx wrangler d1 create d1-template-database
-   ```
-   ...and update the `database_id` field in `wrangler.json` with the new database ID.
-3. Run the following db migration to initialize the database (notice the `migrations` directory in this project):
-   ```bash
-   npx wrangler d1 migrations apply --remote d1-template-database
-   ```
-4. Deploy the project!
-   ```bash
-   npx wrangler deploy
-   ```
+```bash
+npx wrangler vars set ALLOWED_ORIGIN
+```
+
+Set `ALLOWED_ORIGIN` to your website origin (example: `https://yourdomain.com`).
+If not set, CORS defaults to `*`.
+
+6. Deploy:
+```bash
+npx wrangler deploy
+```
+
+## API usage
+
+### Public submit endpoint
+
+`POST /api/messages`
+
+Request body:
+
+```json
+{
+  "name": "John Doe",
+  "email": "john@example.com",
+  "subject": "Project inquiry",
+  "message": "Hello, I want to work with you."
+}
+```
+
+Notes:
+- `subject` is optional.
+- `Content-Type` must be `application/json`.
+
+### Protected list endpoint
+
+`GET /api/messages?limit=50&offset=0`
+
+Provide admin token in one of these:
+- `Authorization: Bearer <ADMIN_TOKEN>`
+- `X-Admin-Token: <ADMIN_TOKEN>`
+- query string: `?token=<ADMIN_TOKEN>` (easy for browser testing, less secure than headers)
+
+### Protected admin page
+
+`GET /admin?token=<ADMIN_TOKEN>`
+
+Shows a clean table of latest messages.
+
+## Your frontend form example
+
+```js
+await fetch("https://<your-worker-domain>/api/messages", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    name,
+    email,
+    subject, // optional
+    message
+  })
+});
+```
+
+## Professional UI for your database
+
+You get two good viewing options:
+
+1. Cloudflare Dashboard D1 UI:
+- Go to Cloudflare Dashboard -> Workers & Pages -> D1 -> your database.
+- Use the **Data** tab for table browsing.
+- Use the **Console** tab for SQL queries.
+
+2. Built-in Worker admin page:
+- `https://<your-worker-domain>/admin?token=<ADMIN_TOKEN>`
+
+For your future PC app, call `GET /api/messages` with the admin token and render the response in your app UI.
